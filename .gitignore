@@ -1,0 +1,5 @@
+# contract build
+**/build/
+
+# JetBrains Rider
+.idea/
