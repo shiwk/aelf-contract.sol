@@ -28,8 +28,8 @@ See [CHOOSING AN ETHEREUM CLIENT](https://www.trufflesuite.com/docs/truffle/refe
 
 ### Example
 
-[demo.metacoin](demo.metacoin) contains simple **metacoin** contract and test cases. 
-And you can also check [init](init) directory for the basic workspace structure. 
+[demo.metacoin](demos/demo.metacoin) contains simple **metacoin** contract and test cases. 
+And you can also check [demo.init](demos/demo.init) directory for the basic workspace structure. 
 See [Truffle docs](https://www.trufflesuite.com/docs/truffle/overview) for details.
 
 *contracts*: Directory for Solidity contracts
