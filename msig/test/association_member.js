@@ -5,13 +5,10 @@ const createAssociation = (owners, minimalApproval, maximalReject, maximalAbstai
     return Association.new(owners, minimalApproval, maximalReject, maximalAbstain, required)
 }
 
-
 const utils = require('./utils')
 
 contract('association', (accounts) => {
     let associationInstance
-
-
     const minimalApproval = 1
     const maximalReject = 0
     const maximalAbstain = 0
@@ -21,7 +18,7 @@ contract('association', (accounts) => {
         associationInstance = await createAssociation([accounts[0], accounts[1], accounts[2]], minimalApproval, maximalReject, maximalAbstain, required)
         assert.ok(associationInstance)
 
-        console.log("assoction created!")
+        console.log("Assoction contract deployed!")
 
         const deposit = 10000000
         // Send money to association contract
@@ -32,6 +29,78 @@ contract('association', (accounts) => {
         }, e => (e ? reject(e) : resolve())))
         const balance = await utils.balanceOf(web3, associationInstance.address)
         assert.equal(balance.valueOf(), deposit)
+    })
+
+    it('add member test', async () => {
+
+        const addMemberData = associationInstance.contract.methods.addMember(accounts[3]).encodeABI()
+        const now1 = Math.floor(Date.now() / 1000) + 60;
+        console.log(`now = ${now1}`)
+        const addMemberProposalId = utils.getParamFromTxEvent(
+            await associationInstance.createProposal(associationInstance.address, 0, addMemberData, now1, {from: accounts[0]}),
+            'proposalId',
+            null,
+            'ProposalCreated'
+        )
+
+        assert.equal(await associationInstance.isMember(accounts[3]), false)
+
+        // not approved
+        utils.assertThrowsAsynchronously(
+            () => associationInstance.release(addMemberProposalId, {from: accounts[0]})
+        )
+        await associationInstance.approve(addMemberProposalId, {from: accounts[0]})
+
+        // not proposer
+        utils.assertThrowsAsynchronously(
+            () => associationInstance.release(addMemberProposalId, {from: accounts[1]})
+        )
+        const releasedId = utils.getParamFromTxEvent(
+            await associationInstance.release(addMemberProposalId, {from: accounts[0]}),
+            'proposalId', null, 'ProposalReleased')
+
+        assert.deepEqual(
+            releasedId,
+            addMemberProposalId
+        )
+        assert.equal(await associationInstance.isMember(accounts[3]), true)
+
+    })
+
+    it('add member already exist test', async () => {
+
+        const addMemberData = associationInstance.contract.methods.addMember(accounts[2]).encodeABI()
+        const now1 = Math.floor(Date.now() / 1000) + 60;
+        console.log(`now = ${now1}`)
+        const addMemberProposalId = utils.getParamFromTxEvent(
+            await associationInstance.createProposal(associationInstance.address, 0, addMemberData, now1, {from: accounts[0]}),
+            'proposalId',
+            null,
+            'ProposalCreated'
+        )
+
+        assert.equal(await associationInstance.isMember(accounts[3]), false)
+
+        // not approved
+        utils.assertThrowsAsynchronously(
+            () => associationInstance.release(addMemberProposalId, {from: accounts[0]})
+        )
+        await associationInstance.approve(addMemberProposalId, {from: accounts[0]})
+
+        // not proposer
+        utils.assertThrowsAsynchronously(
+            () => associationInstance.release(addMemberProposalId, {from: accounts[1]})
+        )
+        const releasedId = utils.getParamFromTxEvent(
+            await associationInstance.release(addMemberProposalId, {from: accounts[0]}),
+            'proposalId', null, 'ProposalReleasedFailed')
+
+        assert.deepEqual(
+            releasedId,
+            addMemberProposalId
+        )
+        assert.equal(await associationInstance.isMember(accounts[3]), false)
+
     })
 
     it('test execution after requirements changed', async () => {
@@ -108,9 +177,15 @@ contract('association', (accounts) => {
         utils.assertThrowsAsynchronously(
             () => associationInstance.release(addMemberProposalId, {from: accounts[1]})
         )
-        await associationInstance.release(addMemberProposalId, {from: accounts[0]})
+        const releaseId = utils.getParamFromTxEvent(
+            await associationInstance.release(addMemberProposalId, {from: accounts[0]}),
+        'proposalId', null, 'ProposalReleased')
+
+        assert.deepEqual(
+            releaseId,
+            addMemberProposalId
+        )
         assert.equal(await associationInstance.isMember(accounts[3]), true)
 
     })
-
 })
