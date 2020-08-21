@@ -42,7 +42,12 @@ contract governed {
     }
 
     modifier memberExists(address _member) {
-        require(m_member_indices[_member] == 0);
+        require(m_member_indices[_member] != 0);
+        _;
+    }
+
+    modifier validMemberCount(uint _count) {
+        require(_count > 1);
         _;
     }
 
@@ -52,10 +57,10 @@ contract governed {
     }
 
     function init(address[] memory _members) internal {
-        m_members.push(address(0));
+        members.push(address(0));
         for (uint i = 0; i < _members.length; ++i)
         {
-            m_members.push(_members[i]);
+            members.push(_members[i]);
             m_member_indices[_members[i]] = 1 + i;
         }
     }
@@ -64,17 +69,17 @@ contract governed {
     function addMember(address _member)
     onlySelf
     memberNotExists(_member)
-    validThreshold(minimal_approval, maximal_rejection, maximal_abstention, required, m_members.length + 1)
+    validThreshold(minimal_approval, maximal_rejection, maximal_abstention, required, members.length + 1)
     external {
-        m_members.push(_member);
-        m_member_indices[_member] = m_members.length - 1;
+        members.push(_member);
+        m_member_indices[_member] = members.length - 1;
         emit MemberAdded(_member);
     }
 
     // Replaces an owner `_from` with another `_to`.
     function changeMember(address _from, address _to) onlySelf memberExists(_from) memberNotExists(_to) external {
         uint index = m_member_indices[_from];
-        m_members[index] = _to;
+        members[index] = _to;
         m_member_indices[_from] = 0;
         m_member_indices[_to] = index;
         emit MemberChanged(_from, _to);
@@ -84,15 +89,18 @@ contract governed {
     function removeMember(address _member)
     onlySelf
     memberExists(_member)
-    validThreshold(minimal_approval, maximal_rejection, maximal_abstention, required, m_members.length - 1)
+    validMemberCount(members.length - 1)
+    validThreshold(minimal_approval, maximal_rejection, maximal_abstention, required, members.length - 1)
     external {
         uint index = m_member_indices[_member];
         // swap
-        m_members[index] = m_members[m_members.length - 1];
-        m_member_indices[m_members[index]] = index;
+        members[index] = members[members.length - 1];
+        m_member_indices[members[index]] = index;
 
         // remove
-        delete m_members[m_members.length - 1];
+        delete m_member_indices[_member];
+        delete members[members.length - 1];
+        members.length--;
 
         emit MemberRemoved(_member);
     }
@@ -123,6 +131,13 @@ contract governed {
         return _addr == address(this);
     }
 
+    function getMembers() public view returns (address[] memory){
+        address[] memory return_members = new address[](members.length -1);
+        for (uint i = 1; i < members.length; i++)
+            return_members[i - 1] = members[i];
+        return return_members;
+    }
+
     // threshold
     uint public minimal_approval;
     uint public maximal_rejection;
@@ -130,7 +145,7 @@ contract governed {
     uint public required;
 
     // members
-    address[] m_members;
+    address[] public members;
     mapping(address => uint) m_member_indices;
 }
 
@@ -171,6 +186,11 @@ contract association is acs3, governed {
         _;
     }
 
+    modifier notExpired(uint time) {
+        require(time > now);
+        _;
+    }
+
     modifier notVoted (uint _proposalId) {
         require(m_votes[_proposalId][msg.sender] == 0);
         _;
@@ -181,25 +201,27 @@ contract association is acs3, governed {
         _;
     }
 
-    constructor (address[] memory _organizationMembers, uint _minimalApproval, uint _maximalRejection,
+    constructor (address[] memory _members, uint _minimalApproval, uint _maximalRejection,
         uint _maximalAbstention, uint _required)
-    validThreshold(_minimalApproval, _maximalRejection, _maximalAbstention, _required, _organizationMembers.length)
+    validMemberCount(_members.length - 1)
+    validThreshold(_minimalApproval, _maximalRejection, _maximalAbstention, _required, _members.length)
     public
     {
-        init(_organizationMembers);
+        init(_members);
         setThreshold(_minimalApproval, _maximalRejection, _maximalAbstention, _required);
     }
 
     // METHODS
     function changeThreshold(uint _minimalApproval, uint _maximalRejection, uint _maximalAbstention, uint _required)
     onlySelf
-    validThreshold(_minimalApproval, _maximalRejection, _maximalAbstention, _required, m_members.length)
+    validThreshold(_minimalApproval, _maximalRejection, _maximalAbstention, _required, members.length)
     external {
         setThreshold(_minimalApproval, _maximalRejection, _maximalAbstention, _required);
         emit ThresholdChanged(_minimalApproval, _maximalRejection, _maximalAbstention, _required);
     }
 
     function createProposal(address _to, uint _value, bytes calldata _data, uint _expiration)
+    notExpired(_expiration)
     external
     returns (uint proposalId){
         proposalId = proposalCount;
@@ -251,12 +273,14 @@ contract association is acs3, governed {
 
     function toBeReleased(uint _proposalId) public view returns (bool)
     {
+        if (isProposalExpired(_proposalId))
+            return false;
         uint approved = 0;
         uint rejected = 0;
         uint abstained = 0;
         uint total = 0;
-        for (uint i = 0; i < m_members.length; i++) {
-            uint v = m_votes[_proposalId][m_members[i]];
+        for (uint i = 0; i < members.length; i++) {
+            uint v = m_votes[_proposalId][members[i]];
             if (v == 1)
             {
                 approved += 1;
@@ -275,6 +299,10 @@ contract association is acs3, governed {
         }
 
         return approved >= minimal_approval && rejected <= maximal_rejection && abstained <= maximal_abstention && total >= required;
+    }
+
+    function isProposalExpired(uint _proposalId) public view returns (bool){
+        return m_proposals[_proposalId].expiration <= now;
     }
 
     // call has been separated into its own function in order to take advantage

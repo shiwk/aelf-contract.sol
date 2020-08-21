@@ -60,8 +60,8 @@ contract('association', (accounts) => {
 
         await associationInstance.approve(sendCoinProposalId, {from: accounts[0]})
         let tx = await associationInstance.release(sendCoinProposalId, {from: accounts[0]})
-        console.log(tx)
-        console.log(tx.receipt.rawLogs)
+        // console.log(tx)
+        // console.log(tx.receipt.rawLogs)
         const releasedId = utils.getParamFromTxEvent(tx, 'proposalId', null, 'ProposalReleased')
 
         assert.deepEqual(
@@ -70,7 +70,6 @@ contract('association', (accounts) => {
         )
 
         let topic = web3.utils.keccak256("Transfer(address,address,uint256)")
-        console.log('topic: ', topic)
         let event = tx.receipt.rawLogs.some(l => {
             return l.topics[0] == topic
         });
