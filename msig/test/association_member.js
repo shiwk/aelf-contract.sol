@@ -32,7 +32,6 @@ contract('association', (accounts) => {
     })
 
     it('add member test', async () => {
-
         const addMemberData = associationInstance.contract.methods.addMember(accounts[3]).encodeABI()
         const now1 = Math.floor(Date.now() / 1000) + 60;
         const addMemberProposalId = utils.getParamFromTxEvent(
@@ -54,16 +53,24 @@ contract('association', (accounts) => {
         utils.assertThrowsAsynchronously(
             () => associationInstance.release(addMemberProposalId, {from: accounts[1]})
         )
-        const releasedId = utils.getParamFromTxEvent(
-            await associationInstance.release(addMemberProposalId, {from: accounts[0]}),
-            'proposalId', null, 'ProposalReleased')
 
+        let releaseTx = await associationInstance.release(addMemberProposalId, {from: accounts[0]})
+        let memberChangedEvent = utils.rawLogEventExists(releaseTx, "MemberAdded(address)")
+        assert.ok(memberChangedEvent)
+
+        const releasedId = utils.getParamFromTxEvent(releaseTx, 'proposalId', null, 'ProposalReleased');
         assert.deepEqual(
             releasedId,
             addMemberProposalId
         )
         assert.equal(await associationInstance.isMember(accounts[3]), true)
 
+    })
+
+    it('add member no permission', async () => {
+        utils.assertThrowsAsynchronously(
+            () => associationInstance.addMember(accounts[2], {from: accounts[0]})
+        )
     })
 
     it('add member already exist test', async () => {
@@ -96,7 +103,6 @@ contract('association', (accounts) => {
             addMemberProposalId
         )
         assert.equal(await associationInstance.isMember(accounts[3]), false)
-
     })
 
     it('remove member test', async () => {
@@ -124,11 +130,8 @@ contract('association', (accounts) => {
         let releaseTx = await associationInstance.release(removeMemberProposalId, {from: accounts[0]})
         const releasedId = utils.getParamFromTxEvent(releaseTx, 'proposalId', null, 'ProposalReleased')
 
-        let topic = web3.utils.keccak256("MemberRemoved(address)")
-        let event = releaseTx.receipt.rawLogs.some(l => {
-            return l.topics[0] == topic
-        });
-        assert.ok(event, "MemberRemoved event not emitted");
+        let memberChangedEvent = utils.rawLogEventExists(releaseTx, "MemberRemoved(address)")
+        assert.ok(memberChangedEvent)
 
         assert.deepEqual(
             releasedId,
@@ -139,6 +142,12 @@ contract('association', (accounts) => {
         assert.equal(await associationInstance.members(2), accounts[1])
         let members = await associationInstance.getMembers()
         assert.deepEqual(members, [accounts[0], accounts[1]])
+    })
+
+    it('remove member no permission', async () => {
+        utils.assertThrowsAsynchronously(
+            () => associationInstance.removeMember(accounts[2], {from: accounts[0]})
+        )
     })
 
     it('remove member not exist test', async () => {
@@ -152,13 +161,14 @@ contract('association', (accounts) => {
         )
 
         await associationInstance.approve(removeMemberProposalId, {from: accounts[1]})
-        let releaseTx = await associationInstance.release(removeMemberProposalId, {from: accounts[0]})
+        const releasedId = utils.getParamFromTxEvent(
+            await associationInstance.release(removeMemberProposalId, {from: accounts[0]}),
+            'proposalId', null, 'ProposalReleasedFailed')
 
-        let topic = web3.utils.keccak256("MemberRemoved(address)")
-        let event = releaseTx.receipt.rawLogs.some(l => {
-            return l.topics[0] == topic
-        });
-        assert.equal(event, false, "MemberRemoved event not emitted");
+        assert.deepEqual(
+            releasedId,
+            removeMemberProposalId
+        )
 
         let members = await associationInstance.getMembers()
         assert.deepEqual(members, [accounts[0], accounts[1], accounts[2]])
@@ -217,6 +227,9 @@ contract('association', (accounts) => {
         let releaseTx = await associationInstance.release(changeMemberProposalId, {from: accounts[0]})
         const releasedId = utils.getParamFromTxEvent(releaseTx, 'proposalId', null, 'ProposalReleased')
 
+        let memberChangedEvent = utils.rawLogEventExists(releaseTx, "MemberChanged(address,address)")
+        assert.ok(memberChangedEvent)
+
         assert.deepEqual(
             releasedId,
             changeMemberProposalId
@@ -224,6 +237,12 @@ contract('association', (accounts) => {
         assert.equal(await associationInstance.isMember(accounts[2]), false)
         let members = await associationInstance.getMembers()
         assert.deepEqual(members, [accounts[0], accounts[1], accounts[3]])
+    })
+
+    it('change member no permission', async () => {
+        utils.assertThrowsAsynchronously(
+            () => associationInstance.changeMember(accounts[2], accounts[3], {from: accounts[0]})
+        )
     })
 
     it('old member not exist', async () => {
@@ -245,12 +264,6 @@ contract('association', (accounts) => {
             releasedId,
             changeMemberProposalId
         )
-
-        let topic = web3.utils.keccak256("MemberChanged(address)")
-        let event = releaseTx.receipt.rawLogs.some(l => {
-            return l.topics[0] == topic
-        });
-        assert.equal(event, false, "MemberChanged event not emitted");
     })
 
     it('new member already exist', async () => {
@@ -272,15 +285,15 @@ contract('association', (accounts) => {
             releasedId,
             changeMemberProposalId
         )
-
-        let topic = web3.utils.keccak256("MemberChanged(address)")
-        let event = releaseTx.receipt.rawLogs.some(l => {
-            return l.topics[0] == topic
-        });
-        assert.equal(event, false, "MemberChanged event not emitted");
     })
 
-    it('test execution after requirements changed', async () => {
+    it('change threshold no permission', async () => {
+        utils.assertThrowsAsynchronously(
+            () => associationInstance.changeThreshold(1, 1,1,2, {from: accounts[0]})
+        )
+    })
+
+    it('release after threshold changed', async () => {
 
         const addMemberData = associationInstance.contract.methods.addMember(accounts[3]).encodeABI()
         const now1 = Math.floor(Date.now() / 1000) + 60;
@@ -336,8 +349,9 @@ contract('association', (accounts) => {
             () => associationInstance.release(changeThresholdProposalId, {from: accounts[9]})
         )
 
-        await associationInstance.release(changeThresholdProposalId, {from: accounts[0]})
-        // releaseTx
+        let releaseTx = await associationInstance.release(changeThresholdProposalId, {from: accounts[0]})
+        let memberChangedEvent = utils.rawLogEventExists(releaseTx, "ThresholdChanged(uint256,uint256,uint256,uint256)")
+        assert.ok(memberChangedEvent)
 
         assert.equal((await associationInstance.minimal_approval()).toNumber(), newMinimalApprove)
         assert.equal((await associationInstance.required()).toNumber(), newRequired)
@@ -381,22 +395,25 @@ contract('association', (accounts) => {
         assert.ok(addMemberProposalId)
     })
 
-    it('approve proposal expired', async () => {
-        const addMemberData = associationInstance.contract.methods.addMember(accounts[3]).encodeABI()
-        const time = Math.floor(Date.now() / 1000) + 60;
-        const addMemberProposalId = utils.getParamFromTxEvent(
-            await associationInstance.createProposal(associationInstance.address, 0, addMemberData, time, {from: accounts[0]}),
-            'proposalId',
-            null,
-            'ProposalCreated'
-        )
-        assert.ok(addMemberProposalId)
-
-        utils.increaseTimestamp(web3, 61)
-        assert.equal(await associationInstance.isProposalExpired(addMemberProposalId), true)
-        assert.equal(await associationInstance.toBeReleased(addMemberProposalId), false)
-    })
-
+    /**
+     * test changing blockchain timestamp
+     */
+    // it('approve proposal expired', async () => {
+    //     const addMemberData = associationInstance.contract.methods.addMember(accounts[3]).encodeABI()
+    //     const time = Math.floor(Date.now() / 1000) + 60;
+    //     const addMemberProposalId = utils.getParamFromTxEvent(
+    //         await associationInstance.createProposal(associationInstance.address, 0, addMemberData, time, {from: accounts[0]}),
+    //         'proposalId',
+    //         null,
+    //         'ProposalCreated'
+    //     )
+    //     assert.ok(addMemberProposalId)
+    //
+    //     utils.increaseTimestamp(web3, 61)
+    //     assert.equal(await associationInstance.isProposalExpired(addMemberProposalId), true)
+    //     assert.equal(await associationInstance.toBeReleased(addMemberProposalId), false)
+    // })
+    //
     // it('release proposal expired', async () => {
     //     const addMemberData = associationInstance.contract.methods.addMember(accounts[3]).encodeABI()
     //     const time = Math.floor(Date.now() / 1000) + 60;
@@ -410,7 +427,9 @@ contract('association', (accounts) => {
     //
     //     await associationInstance.approve(addMemberProposalId, {from: accounts[0]})
     //
+    //     // await utils.sleep(2000)
     //     utils.increaseTimestamp(web3, 61)
+    //     assert.equal(await associationInstance.isProposalExpired(addMemberProposalId), true)
     //     utils.assertThrowsAsynchronously(
     //         () => associationInstance.release(addMemberProposalId, {from: accounts[0]})
     //     )

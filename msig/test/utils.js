@@ -15,6 +15,13 @@ function getParamFromTxEvent(transaction, paramName, contractFactory, eventName)
     }
 }
 
+function rawLogEventExists(transaction, methodSig){
+    let topic = web3.utils.keccak256(methodSig)
+    return transaction.receipt.rawLogs.find(l => {
+        return l.topics[0] === topic
+    });
+}
+
 function mineBlock(web3, reject, resolve) {
     web3.currentProvider.send({
         method: "evm_mine",
@@ -48,9 +55,17 @@ async function assertThrowsAsynchronously(test, error) {
     throw new Error("Missing rejection" + (error ? " with "+error.name : ""));
 }
 
+function sleep(ms) {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms);
+    });
+}
+
 Object.assign(exports, {
     getParamFromTxEvent,
     increaseTimestamp,
     balanceOf,
     assertThrowsAsynchronously,
+    sleep,
+    rawLogEventExists
 })

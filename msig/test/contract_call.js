@@ -58,10 +58,11 @@ contract('association', (accounts) => {
             'ProposalCreated'
         )
 
-        await associationInstance.approve(sendCoinProposalId, {from: accounts[0]})
+        let approveTx = await associationInstance.approve(sendCoinProposalId, {from: accounts[0]})
+        let approveReceiptType = utils.getParamFromTxEvent(approveTx, 'receiptType', null, 'ReceiptCreated')
+        assert.equal(approveReceiptType, 1)
+
         let tx = await associationInstance.release(sendCoinProposalId, {from: accounts[0]})
-        // console.log(tx)
-        // console.log(tx.receipt.rawLogs)
         const releasedId = utils.getParamFromTxEvent(tx, 'proposalId', null, 'ProposalReleased')
 
         assert.deepEqual(
@@ -69,10 +70,7 @@ contract('association', (accounts) => {
             sendCoinProposalId
         )
 
-        let topic = web3.utils.keccak256("Transfer(address,address,uint256)")
-        let event = tx.receipt.rawLogs.some(l => {
-            return l.topics[0] == topic
-        });
+        let event = utils.rawLogEventExists(tx, "Transfer(address,address,uint256)")
         assert.ok(event, "Transfer event not emitted");
 
         const afterBalance = await metaCoinInstance.getBalance(accounts[9])
@@ -80,5 +78,49 @@ contract('association', (accounts) => {
 
         const contractBalance = await metaCoinInstance.getBalance(associationInstance.address)
         assert.equal(contractBalance, metaAmount - amount)
+    })
+
+    it('send coin test - rejected', async () => {
+
+        const amount = 10;
+        const sendCoinData = metaCoinInstance.contract.methods.sendCoin(accounts[9], amount).encodeABI()
+
+        const now1 = Math.floor(Date.now() / 1000) + 60;
+        const sendCoinProposalId = utils.getParamFromTxEvent(
+            await associationInstance.createProposal(metaCoinInstance.address, 0, sendCoinData, now1, {from: accounts[0]}),
+            'proposalId',
+            null,
+            'ProposalCreated'
+        )
+
+        let rejectTx = await associationInstance.reject(sendCoinProposalId, {from: accounts[1]})
+        let rejectReceiptType = utils.getParamFromTxEvent(rejectTx, 'receiptType', null, 'ReceiptCreated')
+        assert.equal(rejectReceiptType, 2)
+
+        utils.assertThrowsAsynchronously(
+            () => associationInstance.release(sendCoinProposalId, {from: accounts[1]})
+        )
+    })
+
+    it('send coin test - abstain', async () => {
+
+        const amount = 10;
+        const sendCoinData = metaCoinInstance.contract.methods.sendCoin(accounts[9], amount).encodeABI()
+
+        const now1 = Math.floor(Date.now() / 1000) + 60;
+        const sendCoinProposalId = utils.getParamFromTxEvent(
+            await associationInstance.createProposal(metaCoinInstance.address, 0, sendCoinData, now1, {from: accounts[0]}),
+            'proposalId',
+            null,
+            'ProposalCreated'
+        )
+
+        let abstainTx = await associationInstance.abstain(sendCoinProposalId, {from: accounts[1]})
+        let abstainReceiptType = utils.getParamFromTxEvent(abstainTx, 'receiptType', null, 'ReceiptCreated')
+        assert.equal(abstainReceiptType, 3)
+
+        utils.assertThrowsAsynchronously(
+            () => associationInstance.release(sendCoinProposalId, {from: accounts[1]})
+        )
     })
 })
